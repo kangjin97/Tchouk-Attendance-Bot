@@ -35,6 +35,17 @@ def listener(messages):
 bot = telebot.TeleBot(token)
 bot.set_update_listener(listener)  # register listener
 
+#Other Necessary Functions
+#FeedBack
+
+feedback_dict = {}
+
+class Feedback:
+    def __init__(self, feedback):
+        self.feedback = feedback
+        self.receiver_id = None
+        self.receiver = None
+
 #Inline keyboards
 def menu_markup():
     markup = InlineKeyboardMarkup()
@@ -43,7 +54,9 @@ def menu_markup():
                InlineKeyboardButton("Events", callback_data="cb_event"),
                InlineKeyboardButton("Training", callback_data="cb_training"),
                InlineKeyboardButton("Club Funds", callback_data="cb_clubfunds"),
-               InlineKeyboardButton("Competitions", callback_data="cb_competition"))
+               InlineKeyboardButton("Competitions", callback_data="cb_competition"),
+               InlineKeyboardButton("Feedback", callback_data="cb_feedback"),
+               InlineKeyboardButton("Quit", callback_data="cb_quit"))
     return markup
 
 def attendance_markup():
@@ -62,6 +75,14 @@ def events_markup():
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
+def feedback_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Training Feedback", callback_data="cb_trainingFeedback"),
+               InlineKeyboardButton("Miscellaneous Feedback", callback_data="cb_miscFeedback"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
 # handle the "/menu" command
 @bot.message_handler(commands=['menu'])
 def command_menu(m):
@@ -71,6 +92,7 @@ def command_menu(m):
 #handle all callback selections
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
+    print(call.message)
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     #level 1 abstraction
@@ -88,6 +110,13 @@ def callback_query(call):
         bot.answer_callback_query(call.id, "Please select competition")
     elif call.data == "cb_clubfunds":
         bot.answer_callback_query(call.id, "Redirecting you to the payment page")
+    elif call.data == "cb_feedback":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Your feedback will greatly improve our community!", chat_id=chat_id,
+                              message_id=message_id, reply_markup=feedback_markup())
+    elif call.data == "cb_quit":
+        bot.answer_callback_query(call.id)
+        bot.delete_message(chat_id, message_id)
 
     #level 2 abstraction
     elif call.data == "cb_back":
@@ -113,8 +142,77 @@ def callback_query(call):
     elif call.data == "cb_checkEvents":
         bot.answer_callback_query(call.id, "This Feature has not been implemented")
 
+    #FEEDBACK
+    elif call.data == "cb_trainingFeedback":
+        bot.answer_callback_query(call.id)
+        print (chat_id)
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+        bot.send_message(chat_id, text="Please tell me your feedback, rest assured this will be 101% anonymous!")
+    elif call.data == "cb_miscFeedback":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+        bot.send_message(chat_id, "Please tell me your feedback, rest assured this will be 101% anonymous!")
 
 
+# def step_function():
+#     bot.register_next_step_handler(msg, process_first_step)
+#
+# def process_first_step(message):
+#     try:
+#         chat_id = message.chat.id
+#         name = message.text
+#         user = User(name)
+#         user_dict[chat_id] = user
+#         msg = bot.reply_to(message, 'How old are you?')
+#         bot.register_next_step_handler(msg, process_age_step)
+#     except Exception as e:
+#         bot.reply_to(message, 'oooops')
+#
+#
+# def process_name_step(message):
+#     try:
+#         chat_id = message.chat.id
+#         name = message.text
+#         user = User(name)
+#         user_dict[chat_id] = user
+#         msg = bot.reply_to(message, 'How old are you?')
+#         bot.register_next_step_handler(msg, process_age_step)
+#     except Exception as e:
+#         bot.reply_to(message, 'oooops')
+#
+#
+# def process_age_step(message):
+#     try:
+#         chat_id = message.chat.id
+#         age = message.text
+#         if not age.isdigit():
+#             msg = bot.reply_to(message, 'Age should be a number. How old are you?')
+#             bot.register_next_step_handler(msg, process_age_step)
+#             return
+#         user = user_dict[chat_id]
+#         user.age = age
+#         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+#         markup.add('Male', 'Female')
+#         msg = bot.reply_to(message, 'What is your gender', reply_markup=markup)
+#         bot.register_next_step_handler(msg, process_sex_step)
+#     except Exception as e:
+#         bot.reply_to(message, 'oooops')
+#
+#
+# def process_sex_step(message):
+#     try:
+#         chat_id = message.chat.id
+#         sex = message.text
+#         user = user_dict[chat_id]
+#         if (sex == u'Male') or (sex == u'Female'):
+#             user.sex = sex
+#         else:
+#             raise Exception()
+#         bot.send_message(chat_id, 'Nice to meet you ' + user.name + '\n Age:' + str(user.age) + '\n Sex:' + user.sex)
+#     except Exception as e:
+#         bot.reply_to(message, 'oooops')
 
 
 bot.polling(none_stop=True)
