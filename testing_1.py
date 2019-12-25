@@ -12,8 +12,15 @@ client = gspread.authorize(creds)
 
 sheet = client.open('Tchouk Attendence').sheet1
 
-tchoukers = sheet.get_all_records()
-print (tchoukers)
+def get_attendance():
+    attendancecolumn = sheet.col_values(1)
+    attendancelist = ""
+
+    for name in attendancecolumn[1:]:
+        attendancelist += name + "\n"
+
+    return attendancelist
+
 
 # only used for console output now
 def listener(messages):
@@ -39,11 +46,20 @@ def menu_markup():
                InlineKeyboardButton("Competitions", callback_data="cb_competition"))
     return markup
 
-def gen_markup():
+def attendance_markup():
     markup = InlineKeyboardMarkup()
-    markup.row_width = 2
-    markup.add(InlineKeyboardButton("Yes", callback_data="cb_yes"),
-                               InlineKeyboardButton("No", callback_data="cb_no"))
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Check Attendance", callback_data="cb_checkAttendance"),
+               InlineKeyboardButton("Post Attendance", callback_data="cb_postAttendance"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+def events_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Check Events", callback_data="cb_checkEvents"),
+               InlineKeyboardButton("Create Events", callback_data="cb_createEvents"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
 # handle the "/menu" command
@@ -55,19 +71,50 @@ def command_menu(m):
 #handle all callback selections
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    #level 1 abstraction
     if call.data == "cb_attendance":
-        bot.answer_callback_query(call.id, "Displaying attendance")
-        # print (call.message)
-        # bot.edit_message_reply_markup(chat_id= call.message.chat.id, message_id=call.message.message_id, reply_markup=gen_markup())
-        bot.edit_message_text(text="Which part of attendance do you need assistance with?", chat_id= call.message.chat.id, message_id=call.message.message_id, reply_markup=gen_markup())
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Which part of Attendance do you need assistance with?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=attendance_markup())
     elif call.data == "cb_event":
-        bot.answer_callback_query(call.id, "Please select event")
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Which part of Events do you need assistance with?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=events_markup())
     elif call.data == "cb_training":
         bot.answer_callback_query(call.id, "Please select training")
     elif call.data == "cb_competition":
         bot.answer_callback_query(call.id, "Please select competition")
     elif call.data == "cb_clubfunds":
         bot.answer_callback_query(call.id, "Redirecting you to the payment page")
+
+    #level 2 abstraction
+    elif call.data == "cb_back":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+    #ATTENDANCE
+    elif call.data == "cb_checkAttendance":
+        bot.answer_callback_query(call.id, "Displaying Attendance")
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+        bot.send_message(chat_id, get_attendance())
+    elif call.data == "cb_postAttendance":
+        bot.answer_callback_query(call.id)
+        #add authorization here
+        bot.edit_message_text(text="Welcome Captain", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+        bot.send_message(chat_id, get_attendance())
+
+    #EVENTS
+    elif call.data == "cb_createEvents":
+        bot.answer_callback_query(call.id, "This Feature has not been implemented")
+    elif call.data == "cb_checkEvents":
+        bot.answer_callback_query(call.id, "This Feature has not been implemented")
+
+
+
 
 
 bot.polling(none_stop=True)
