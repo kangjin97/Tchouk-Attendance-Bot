@@ -49,6 +49,13 @@ def authenticate(uid):
 
     return None
 
+def protect(uid):
+    registered_uid = loginSheet.col_values(1)
+    uid = str(uid)
+    if uid in registered_uid:
+        return True
+    return False
+
 # handle the "/start" command
 @bot.message_handler(commands=['login'])
 def command_login(m):
