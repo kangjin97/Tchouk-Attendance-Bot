@@ -14,8 +14,8 @@ loginSheet = client.open('Tchouk Attendance').worksheet("Userid")
 creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
 
 def get_attendance():
-    attendancecolumn = loginSheet.col_values(1)
-    attendancelist = ""
+    attendancecolumn = loginSheet.col_values(2)
+    attendancelist = "Attendance:\n"
 
     for name in attendancecolumn[1:]:
         attendancelist += name + "\n"
