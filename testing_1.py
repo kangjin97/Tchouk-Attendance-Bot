@@ -10,7 +10,8 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name('tchoukers.json', scope)
 client = gspread.authorize(creds)
 
-loginSheet = client.open('Tchouk Attendence').worksheet("userid")
+loginSheet = client.open('Tchouk Attendance').worksheet("Userid")
+creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
 
 def get_attendance():
     attendancecolumn = loginSheet.col_values(1)
@@ -41,9 +42,10 @@ bot.set_update_listener(listener)  # register listener
 
 def authenticate(uid):
     registered_uid = loginSheet.col_values(1)
+    uid = str(uid)
     if uid in registered_uid:
         uidcell = loginSheet.find(uid)
-        return loginSheet.cell(uidcell.row, uidcell.col).value
+        return loginSheet.row_values(uidcell.row)
 
     return None
 
@@ -51,13 +53,43 @@ def authenticate(uid):
 @bot.message_handler(commands=['login'])
 def command_login(m):
     cid = m.chat.id
+    #Prevents Log-In from anything other than PM-ing the BOT
+    if m.chat.type != "private":
+        bot.send_message(cid, "You can only Log-In by PM-ing me!")
+        return None
+
+    #Authenticate Password from Database & Determine Status
+    normal_password = creatorSheet.acell('B2').value
+    exco_password = creatorSheet.acell('B3').value
+
+    if m.text[7:] == normal_password:
+        status = 1
+    elif m.text[7:] == exco_password:
+        status = 2
+    else:
+        bot.send_message(cid, "Invalid Password!")
+        return None
+
+    #If not registered before, add user into database
     if not authenticate(cid):  # if user hasn't used the "/start" command yet:
         row_value = len(loginSheet.col_values(1))  # Target Row
-        loginSheet.insert_row([cid, 'kangjin', 1], row_value + 1)
-        bot.send_message(cid, "User Authenticated, Welcome {}!".format(cid))
-        # command_help(m)  # show the new user the help page
+        handle = "@" + m.from_user.username
+        loginSheet.insert_row([cid, m.from_user.first_name, status, handle], row_value + 1)
+        bot.send_message(cid, "User Authenticated, Welcome {}!".format(authenticate(cid)[1]))
+
+    #If changing status, Display change
+    elif status != int(authenticate(cid)[2]):
+        uidcell = loginSheet.find(str(cid))
+        loginSheet.update_cell(uidcell.row, 3, status)
+        if status == 1:
+            position = "Member"
+        elif status == 2:
+            position = "Exco"
+        bot.send_message(cid, "Member status updated: " + position)
+
+    #If already in database, Tell member to GTFO!
     else:
-        bot.send_message(cid, "I already know you, no need for me to scan you again!")
+        bot.send_message(cid, "You are already registered in our database, " + authenticate(cid)[1] + " stop bugging me!")
 
 #FeedBack
 
