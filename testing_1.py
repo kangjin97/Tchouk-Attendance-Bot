@@ -39,37 +39,25 @@ bot.set_update_listener(listener)  # register listener
 
 #authentication
 
-registered_uid = loginSheet.col_values(1)
-# knownUsers = []  # todo: save these in a file,
-userStep = {}  # so they won't reset every time the bot restarts
+def authenticate(uid):
+    registered_uid = loginSheet.col_values(1)
+    if uid in registered_uid:
+        uidcell = loginSheet.find(uid)
+        return loginSheet.cell(uidcell.row, uidcell.col).value
 
-# def authenticate(uid):
-#
-#
-# # error handling if user isn't known yet
-# # (obsolete once known users are saved to file, because all users
-# #   had to use the /start command and are therefore known to the bot)
-# def get_user_step(uid):
-#     if uid in userStep:
-#         return userStep[uid]
-#     else:
-#         knownUsers.append(uid)
-#         userStep[uid] = 0
-#         print("New user detected, who hasn't used \"/start\" yet")
-#         return 0
-#
-# # handle the "/start" command
-# @bot.message_handler(commands=['start'])
-# def command_start(m):
-#     cid = m.chat.id
-#     if cid not in knownUsers:  # if user hasn't used the "/start" command yet:
-#         knownUsers.append(cid)  # save user id, so you could brodcast messages to all users of this bot later
-#         userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
-#         bot.send_message(cid, "Hello, stranger, let me scan you...")
-#         bot.send_message(cid, "Scanning complete, I know you now")
-#         command_help(m)  # show the new user the help page
-#     else:
-#         bot.send_message(cid, "I already know you, no need for me to scan you again!")
+    return None
+
+# handle the "/start" command
+@bot.message_handler(commands=['login'])
+def command_login(m):
+    cid = m.chat.id
+    if not authenticate(cid):  # if user hasn't used the "/start" command yet:
+        row_value = len(loginSheet.col_values(1))  # Target Row
+        loginSheet.insert_row([cid, 'kangjin', 1], row_value + 1)
+        bot.send_message(cid, "User Authenticated, Welcome {}!".format(cid))
+        # command_help(m)  # show the new user the help page
+    else:
+        bot.send_message(cid, "I already know you, no need for me to scan you again!")
 
 #FeedBack
 
