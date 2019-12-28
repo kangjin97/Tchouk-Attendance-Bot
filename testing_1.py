@@ -23,7 +23,6 @@ feedbacksheet = client.open('Tchouk Attendance').worksheet("Feedback")
 creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
 
 #GLOBALS
-maingroup_cid = int(creatorSheet.acell('B5').value)
 
 # only used for console output now
 def listener(messages):
@@ -52,8 +51,6 @@ def authenticate(uid):
     return None
 
 def protect(uid):
-    if uid == maingroup_cid:
-        return True
     registered_uid = loginSheet.col_values(1)
     uid = str(uid)
     if uid in registered_uid:
@@ -65,19 +62,43 @@ def get_today(d=datetime.datetime.today()):
     return [d.strftime('%d'), d.strftime('%b'), d.strftime('%a'), d.strftime('%w')]
 
 def get_attendance():
-    attendancecolumn = loginSheet.col_values(2)
-    attendancelist = "Attendance:\n"
+    attending_dict_list = attendanceSheet.get_all_records()
+    attendancelist = "Going:\n"
 
-    for name in attendancecolumn[1:]:
-        attendancelist += name + "\n"
+    for dicts in attending_dict_list:
+        if dicts['Training ID'] == 1:
+            attendancelist += dicts['Username'] + "\n"
 
     return attendancelist
 
 def get_training_id():
-    training_id = int(creatorSheet.acell('B7').value)
-    creatorSheet.update_acell('B7', training_id + 1)
+    training_id = int(creatorSheet.acell('B5').value)
+    creatorSheet.update_acell('B5', training_id + 1)
 
     return training_id
+
+def add_attendance(uid, tid):
+    try:
+        uidcell = loginSheet.find(str(uid))
+    except:
+        return None
+
+    username = loginSheet.cell(uidcell.row, 2).value
+    handle = loginSheet.cell(uidcell.row, 4).value
+
+    attending_dict_list = attendanceSheet.get_all_records()
+
+    if len(attending_dict_list) == 0:
+        attendanceSheet.insert_row([tid, uid, username, handle], 2)
+        return None
+
+    else:
+        for dicts in attending_dict_list:
+            if dicts["Uid"] == uid and dicts['Training ID'] == int(tid):
+                return None
+
+    row_to_insert = len(attendanceSheet.col_values(1))
+    attendanceSheet.insert_row([tid, uid, username, handle], row_to_insert + 1)
 
 def create_standard_training():
     day, month, weekday, weekday_num = get_today()
@@ -138,6 +159,14 @@ def attendance_markup():
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
+def reply_attendance_markup(TID):
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Attending", callback_data="cb_attending" + TID),
+               InlineKeyboardButton("Valid Reason", callback_data="cb_validReason" + TID),
+               InlineKeyboardButton("Find Excuse", callback_data="cb_findExcuse" + TID))
+    return markup
+
 #types available are post(P), check(C), delete(D)
 def training_selection_markup(type):
     markup = InlineKeyboardMarkup()
@@ -178,17 +207,11 @@ def feedback_markup():
 
 #FUNCTIONALITIES
 
-# handle the "/start" command
+# handle the "/login" command
 @bot.message_handler(commands=['login'])
 def command_login(m):
+    uid = m.from_user.id
     cid = m.chat.id
-    #Protect Function
-    if not protect(cid):
-        return None
-    #Prevents Log-In from anything other than PM-ing the BOT
-    if m.chat.type != "private":
-        bot.send_message(cid, "You can only Log-In by PM-ing me!")
-        return None
 
     #Authenticate Password from Database & Determine Status
     normal_password = creatorSheet.acell('B2').value
@@ -203,15 +226,15 @@ def command_login(m):
         return None
 
     #If not registered before, add user into database
-    if not authenticate(cid):  # if user hasn't used the "/start" command yet:
+    if not authenticate(uid):  # if user hasn't used the "/start" command yet:
         row_value = len(loginSheet.col_values(1))  # Target Row
         handle = "@" + m.from_user.username
-        loginSheet.insert_row([cid, m.from_user.first_name, status, handle], row_value + 1)
-        bot.send_message(cid, "User Authenticated, Welcome {}!".format(authenticate(cid)[1]))
+        loginSheet.insert_row([uid, m.from_user.first_name, status, handle], row_value + 1)
+        bot.send_message(cid, "User Authenticated, Welcome {}!".format(authenticate(uid)[1]))
 
     #If changing status, Display change
-    elif status != int(authenticate(cid)[2]):
-        uidcell = loginSheet.find(str(cid))
+    elif status != int(authenticate(uid)[2]):
+        uidcell = loginSheet.find(str(uid))
         loginSheet.update_cell(uidcell.row, 3, status)
         if status == 1:
             position = "Member"
@@ -223,6 +246,15 @@ def command_login(m):
     else:
         bot.send_message(cid, "You are already registered in our database, " + authenticate(cid)[1] + " stop bugging me!")
 
+# handle the "/menu" command
+@bot.message_handler(commands=['menu'])
+def command_menu(m):
+    cid = m.from_user.id
+    # Protect Function
+    if not protect(cid):
+        return None
+    bot.send_message(m.chat.id, "Hello, Tchoukie! How can I help you today?", reply_markup=menu_markup())
+
 #FeedBack
 
 feedback_dict = {}
@@ -233,21 +265,11 @@ class Feedback:
         self.receiver_id = None
         self.receiver = None
 
-
-
-# handle the "/menu" command
-@bot.message_handler(commands=['menu'])
-def command_menu(m):
-    cid = m.chat.id
-    # Protect Function
-    if not protect(cid):
-        return None
-    bot.send_message(cid, "Hello, Tchoukie! How can I help you today?", reply_markup=menu_markup())
-
 #handle all callback selections
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     print(call.message)
+    user_id = call.from_user.id
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     #level 1 abstraction
@@ -298,15 +320,35 @@ def callback_query(call):
         bot.answer_callback_query(call.id, "posting attendance")
         selected_cell = trainingSheet.find(call.data[4:])
         training_details = trainingSheet.row_values(selected_cell.row)
-        bot.send_message(chat_id, "{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {}".format(training_details[1],
+        bot.send_message(chat_id, "{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                                    training_details[2],
                                                                                                    training_details[3],
                                                                                                    training_details[5],
                                                                                                    training_details[6],
                                                                                                    training_details[7],
-                                                                                                   training_details[0]))
+                                                                                                   training_details[0])
+                         + get_attendance(),
+                         reply_markup=reply_attendance_markup(str(training_details[0])))
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
+
+    #UPDATE ATTENDANCE
+    elif call.data.startswith('cb_attending'):
+        training_code = call.data[12:]
+        bot.answer_callback_query(call.id, "You are attending training #" + training_code)
+        add_attendance(user_id, training_code)
+        selected_cell = trainingSheet.find(training_code)
+        training_details = trainingSheet.row_values(selected_cell.row)
+        bot.edit_message_text(text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                                    training_details[2],
+                                                                                                    training_details[3],
+                                                                                                    training_details[5],
+                                                                                                    training_details[6],
+                                                                                                    training_details[7],
+                                                                                                    training_details[0])
+                              +get_attendance(),
+                              chat_id=chat_id,
+                              message_id=message_id, reply_markup=reply_attendance_markup(str(training_details[0])))
 
     #EVENTS
     elif call.data == "cb_createEvents":
