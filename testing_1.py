@@ -3,6 +3,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pprint import pprint
+import datetime
 
 #Initialize token and authorize database
 token = '1057289810:AAH9VmpZwd8xWOHt6K03qc5eceFNpAwqWIE'
@@ -10,18 +11,19 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name('tchoukers.json', scope)
 client = gspread.authorize(creds)
 
+#VARIABLES
+#GSHEET
 loginSheet = client.open('Tchouk Attendance').worksheet("Userid")
+attendanceSheet = client.open('Tchouk Attendance').worksheet("Attendance")
+eventsSheet = client.open('Tchouk Attendance').worksheet("Events")
+trainingSheet = client.open('Tchouk Attendance').worksheet("Training")
+clubfundsSheet = client.open('Tchouk Attendance').worksheet("Club Funds")
+competitionsSheet = client.open('Tchouk Attendance').worksheet("Competitions")
+feedbacksheet = client.open('Tchouk Attendance').worksheet("Feedback")
 creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
 
-def get_attendance():
-    attendancecolumn = loginSheet.col_values(2)
-    attendancelist = "Attendance:\n"
-
-    for name in attendancecolumn[1:]:
-        attendancelist += name + "\n"
-
-    return attendancelist
-
+#GLOBALS
+maingroup_cid = int(creatorSheet.acell('B5').value)
 
 # only used for console output now
 def listener(messages):
@@ -50,16 +52,109 @@ def authenticate(uid):
     return None
 
 def protect(uid):
+    if uid == maingroup_cid:
+        return True
     registered_uid = loginSheet.col_values(1)
     uid = str(uid)
     if uid in registered_uid:
         return True
     return False
 
+#array [day, month, weekday, weekday num]
+def get_today(d=datetime.datetime.today()):
+    return [d.strftime('%d'), d.strftime('%b'), d.strftime('%a'), d.strftime('%w')]
+
+def get_attendance():
+    attendancecolumn = loginSheet.col_values(2)
+    attendancelist = "Attendance:\n"
+    print(get_today())
+    create_standard_training()
+
+    for name in attendancecolumn[1:]:
+        attendancelist += name + "\n"
+
+    return attendancelist
+
+def create_standard_training():
+    day, month, weekday, weekday_num = get_today()
+    standard_training_created = trainingSheet.col_values(9)
+    if '1' in standard_training_created:
+        return False
+
+    if int(weekday_num) <= 1:
+        next_training_day = 2
+    elif int(weekday_num) <= 4:
+        next_training_day = 5
+    else:
+        next_training_day = 0
+
+    days_from_next_training = (next_training_day - int(weekday_num)) % 7
+    training_day = get_today(datetime.datetime.today() + datetime.timedelta(days=days_from_next_training))
+
+    row_value = len(trainingSheet.row_values(1))
+    standard_header =
+    standard_venue =
+    standard_time =
+    trainingSheet.insert_row([1, ])
+
+
+
+
+#Inline keyboards
+def menu_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(InlineKeyboardButton("Attendance", callback_data="cb_attendance"),
+               InlineKeyboardButton("Events", callback_data="cb_event"),
+               InlineKeyboardButton("Training", callback_data="cb_training"),
+               InlineKeyboardButton("Club Funds", callback_data="cb_clubfunds"),
+               InlineKeyboardButton("Competitions", callback_data="cb_competition"),
+               InlineKeyboardButton("Feedback", callback_data="cb_feedback"),
+               InlineKeyboardButton("Quit", callback_data="cb_quit"))
+    return markup
+
+def attendance_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Check Attendance", callback_data="cb_checkAttendance"),
+               InlineKeyboardButton("Post Attendance", callback_data="cb_postAttendance"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+def events_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Check Events", callback_data="cb_checkEvents"),
+               InlineKeyboardButton("Create Events", callback_data="cb_createEvents"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+def training_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Create Standard Training", callback_data="cb_createStandardTraining"),
+               InlineKeyboardButton("Create Custom Training", callback_data="cb_createCustomTraining"),
+               InlineKeyboardButton("Delete Training", callback_data="cb_deleteTraining"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+def feedback_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Training Feedback", callback_data="cb_trainingFeedback"),
+               InlineKeyboardButton("Miscellaneous Feedback", callback_data="cb_miscFeedback"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+#FUNCTIONALITIES
+
 # handle the "/start" command
 @bot.message_handler(commands=['login'])
 def command_login(m):
     cid = m.chat.id
+    #Protect Function
+    if not protect(cid):
+        return None
     #Prevents Log-In from anything other than PM-ing the BOT
     if m.chat.type != "private":
         bot.send_message(cid, "You can only Log-In by PM-ing me!")
@@ -108,47 +203,15 @@ class Feedback:
         self.receiver_id = None
         self.receiver = None
 
-#Inline keyboards
-def menu_markup():
-    markup = InlineKeyboardMarkup()
-    markup.row_width = 2
-    markup.add(InlineKeyboardButton("Attendance", callback_data="cb_attendance"),
-               InlineKeyboardButton("Events", callback_data="cb_event"),
-               InlineKeyboardButton("Training", callback_data="cb_training"),
-               InlineKeyboardButton("Club Funds", callback_data="cb_clubfunds"),
-               InlineKeyboardButton("Competitions", callback_data="cb_competition"),
-               InlineKeyboardButton("Feedback", callback_data="cb_feedback"),
-               InlineKeyboardButton("Quit", callback_data="cb_quit"))
-    return markup
 
-def attendance_markup():
-    markup = InlineKeyboardMarkup()
-    markup.row_width = 1
-    markup.add(InlineKeyboardButton("Check Attendance", callback_data="cb_checkAttendance"),
-               InlineKeyboardButton("Post Attendance", callback_data="cb_postAttendance"),
-               InlineKeyboardButton("Back", callback_data="cb_back"))
-    return markup
-
-def events_markup():
-    markup = InlineKeyboardMarkup()
-    markup.row_width = 1
-    markup.add(InlineKeyboardButton("Check Events", callback_data="cb_checkEvents"),
-               InlineKeyboardButton("Create Events", callback_data="cb_createEvents"),
-               InlineKeyboardButton("Back", callback_data="cb_back"))
-    return markup
-
-def feedback_markup():
-    markup = InlineKeyboardMarkup()
-    markup.row_width = 1
-    markup.add(InlineKeyboardButton("Training Feedback", callback_data="cb_trainingFeedback"),
-               InlineKeyboardButton("Miscellaneous Feedback", callback_data="cb_miscFeedback"),
-               InlineKeyboardButton("Back", callback_data="cb_back"))
-    return markup
 
 # handle the "/menu" command
 @bot.message_handler(commands=['menu'])
 def command_menu(m):
     cid = m.chat.id
+    # Protect Function
+    if not protect(cid):
+        return None
     bot.send_message(cid, "Hello, Tchoukie! How can I help you today?", reply_markup=menu_markup())
 
 #handle all callback selections
@@ -167,7 +230,9 @@ def callback_query(call):
         bot.edit_message_text(text="Which part of Events do you need assistance with?", chat_id=chat_id,
                               message_id=message_id, reply_markup=events_markup())
     elif call.data == "cb_training":
-        bot.answer_callback_query(call.id, "Please select training")
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Which part of Events do you need assistance with?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=training_markup())
     elif call.data == "cb_competition":
         bot.answer_callback_query(call.id, "Please select competition")
     elif call.data == "cb_clubfunds":
@@ -201,6 +266,19 @@ def callback_query(call):
     #EVENTS
     elif call.data == "cb_createEvents":
         bot.answer_callback_query(call.id, "This Feature has not been implemented")
+    elif call.data == "cb_checkEvents":
+        bot.answer_callback_query(call.id, "This Feature has not been implemented")
+
+    #TRAINING
+    elif call.data == "cb_createStandardTraining":
+
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Select Training", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+    elif call.data == "cb_createCustomTraining":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(text="Select Training", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
     elif call.data == "cb_checkEvents":
         bot.answer_callback_query(call.id, "This Feature has not been implemented")
 
