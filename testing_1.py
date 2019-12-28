@@ -67,13 +67,17 @@ def get_today(d=datetime.datetime.today()):
 def get_attendance():
     attendancecolumn = loginSheet.col_values(2)
     attendancelist = "Attendance:\n"
-    print(get_today())
-    create_standard_training()
 
     for name in attendancecolumn[1:]:
         attendancelist += name + "\n"
 
     return attendancelist
+
+def get_training_id():
+    training_id = int(creatorSheet.acell('B7').value)
+    creatorSheet.update_acell('B7', training_id + 1)
+
+    return training_id
 
 def create_standard_training():
     day, month, weekday, weekday_num = get_today()
@@ -89,13 +93,26 @@ def create_standard_training():
         next_training_day = 0
 
     days_from_next_training = (next_training_day - int(weekday_num)) % 7
-    training_day = get_today(datetime.datetime.today() + datetime.timedelta(days=days_from_next_training))
+    training_day = datetime.datetime.today() + datetime.timedelta(days=days_from_next_training)
+    training_day_info = get_today(training_day)
+    reply_day = training_day - datetime.timedelta(days=1)
+    reply_day_info = get_today(reply_day)
+
+    training_venue = "SMU MPSH"
+    if next_training_day != 0:
+        training_time = "12PM - 3PM"
+    else:
+        training_time = "1PM - 4PM"
 
     row_value = len(trainingSheet.row_values(1))
-    standard_header =
-    standard_venue =
-    standard_time =
-    trainingSheet.insert_row([1, ])
+    standard_header = "❗️Kindly RSVP by {} {} {}, 6pm❗️\n".format(reply_day_info[2], reply_day_info[0], reply_day_info[1])
+    standard_venue = "Venue: " + training_venue + "\n"
+    standard_time ="Time: " + training_time + "\n"
+    trainingSheet.insert_row(
+        [get_training_id(), standard_header, training_venue, training_time, training_day_info[3], training_day_info[2],
+         training_day_info[0], training_day_info[1], 1], 2)
+
+    return training_day_info[2], training_day_info[0], training_day_info[1]
 
 
 
@@ -119,6 +136,19 @@ def attendance_markup():
     markup.add(InlineKeyboardButton("Check Attendance", callback_data="cb_checkAttendance"),
                InlineKeyboardButton("Post Attendance", callback_data="cb_postAttendance"),
                InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+#types available are post(P), check(C), delete(D)
+def training_selection_markup(type):
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    dict_all_trainings = trainingSheet.get_all_records()
+    print (dict_all_trainings)
+    for training in dict_all_trainings:
+        markup.add(InlineKeyboardButton(
+            "{}, {} {} {}".format(training['Weekday'], training['Day'], training['Month'], training['Time']),
+            callback_data=type + "TID" + str(training['Training ID'])))
+    markup.add(InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
 def events_markup():
@@ -250,18 +280,33 @@ def callback_query(call):
         bot.answer_callback_query(call.id)
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
-    #ATTENDANCE
+    #ATTENDANCE LAYER 2
     elif call.data == "cb_checkAttendance":
         bot.answer_callback_query(call.id, "Displaying Attendance")
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
         bot.send_message(chat_id, get_attendance())
     elif call.data == "cb_postAttendance":
-        bot.answer_callback_query(call.id)
+        bot.answer_callback_query(call.id, "Select training to post")
         #add authorization here
-        bot.edit_message_text(text="Welcome Captain", chat_id=chat_id,
+        bot.edit_message_text(text="Which training attendance would you like to post?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=training_selection_markup('P'))
+
+    # ATTENDANCE LAYER 3
+    #POST ATTENDANCE
+    elif call.data.startswith('PTID'):
+        bot.answer_callback_query(call.id, "posting attendance")
+        selected_cell = trainingSheet.find(call.data[4:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        bot.send_message(chat_id, "{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {}".format(training_details[1],
+                                                                                                   training_details[2],
+                                                                                                   training_details[3],
+                                                                                                   training_details[5],
+                                                                                                   training_details[6],
+                                                                                                   training_details[7],
+                                                                                                   training_details[0]))
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
-        bot.send_message(chat_id, get_attendance())
 
     #EVENTS
     elif call.data == "cb_createEvents":
@@ -271,9 +316,13 @@ def callback_query(call):
 
     #TRAINING
     elif call.data == "cb_createStandardTraining":
-
-        bot.answer_callback_query(call.id)
-        bot.edit_message_text(text="Select Training", chat_id=chat_id,
+        bot.answer_callback_query(call.id, "Creating training...")
+        status = create_standard_training()
+        if status:
+            bot.send_message(chat_id, "Training created on {}, {} {}. Remember to send out attendance as well!".format(status[0], status[1], status[2]))
+        else:
+            bot.send_message(chat_id, "The next standard training has already been created. Remember to send out attendance!")
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
     elif call.data == "cb_createCustomTraining":
         bot.answer_callback_query(call.id)
