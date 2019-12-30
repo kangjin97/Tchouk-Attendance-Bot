@@ -4,8 +4,12 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pprint import pprint
 import datetime
+from flask import Flask, request
+import os
+
 
 #Initialize token and authorize database
+server = Flask(__name__)
 token = '1057289810:AAH9VmpZwd8xWOHt6K03qc5eceFNpAwqWIE'
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('tchoukers.json', scope)
@@ -682,6 +686,23 @@ def callback_query(call):
                               message_id=message_id, reply_markup=menu_markup())
         bot.send_message(chat_id, "Please tell me your feedback, rest assured this will be 101% anonymous!")
 
+# bot.polling(none_stop=True)
+
+@server.route('/' + bot_token, methods=['POST'])
+def getMessage():
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "!", 200
+
+@server.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url='https://tchoukbot.herokuapp.com/' + token)
+    return "!", 200
+
+
+if __name__ == "__main__":
+    server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+
 
 # def step_function():
 #     bot.register_next_step_handler(msg, process_first_step)
@@ -741,8 +762,6 @@ def callback_query(call):
 #     except Exception as e:
 #         bot.reply_to(message, 'oooops')
 
-
-bot.polling(none_stop=True)
 
 # def gen_markup():
 #     markup = InlineKeyboardMarkup()
