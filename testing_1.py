@@ -212,6 +212,7 @@ def fill_attendance_sheet(training_id, training_day):
         row_to_insert += 1
 
 # error handling
+# [1 = findExcuse, 2 = addRemark]
 def get_user_step(uid):
     try:
         value = userStep[uid][0]
@@ -378,6 +379,36 @@ def find_excuse(m):
 
     userStep[uid] = 0  # reset the users step back to 0
 
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 2)
+def updateRemark(m):
+    uid = m.chat.id
+    p_chat_id = userStep[uid][1]
+    p_message_id = userStep[uid][2]
+    tid = userStep[uid][3]
+
+    reason = m.text
+    if update_remark(uid, tid, reason):
+        selected_cell = trainingSheet.find(tid)
+        training_details = trainingSheet.row_values(selected_cell.row)
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id,
+            reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+    else:
+        bot.send_message(uid,
+                         "Hold up, you already gave a valid reason for not attending... If you want to use another "
+                         "valid reason, use the [valid reason] function again, "
+                         "But if you want to find an excuse, this is not how you do it... ")
+
+    userStep[uid] = 0  # reset the users step back to 0
 
 #FeedBack
 
@@ -604,10 +635,16 @@ def callback_query(call):
         training_code = call.data[13:]
         bot.answer_callback_query(call.id, "Looking for an excuse are we eh? Come PM me 👿")
         bot.send_message(user_id,
-                         text="Hit me with your best excuse! 🤯")
+                         text="Hit me with your best excuse! 🤯 Just type it in here!")
         userStep[user_id] = [1, chat_id, message_id, training_code]  # set the user to the next step (expecting a reply in the listener now)
 
-
+    elif call.data.startswith('cb_addRemark'):
+        training_code = call.data[12:]
+        bot.answer_callback_query(call.id, "Got something special to add? PM me with whatever it is!")
+        bot.send_message(user_id,
+                         text="Going to be late? Need to leave training Early? or want to change your excuse into a more creative one? Let us know in advance!")
+        userStep[user_id] = [2, chat_id, message_id,
+                             training_code]  # set the user to the next step (expecting a reply in the listener now)
 
     #EVENTS
     elif call.data == "cb_createEvents":
