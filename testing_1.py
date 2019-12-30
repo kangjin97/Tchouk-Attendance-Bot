@@ -61,13 +61,31 @@ def protect(uid):
 def get_today(d=datetime.datetime.today()):
     return [d.strftime('%d'), d.strftime('%b'), d.strftime('%a'), d.strftime('%w')]
 
-def get_attendance():
+def get_attendance(tid):
     attending_dict_list = attendanceSheet.get_all_records()
-    attendancelist = "Going:\n"
+    going = "Going:\n"
+    not_going = "Not Going:\n"
+    unsaid = "\n"
+    not_going_dict = {}
 
     for dicts in attending_dict_list:
-        if dicts['Training ID'] == 1:
-            attendancelist += dicts['Username'] + "\n"
+        if dicts["Reason"] != "":
+            reason = " (" + dicts["Reason"] + ")"
+        else:
+            reason = ""
+
+        if dicts['Training ID'] == int(tid) and dicts["Going"] == 1:
+            going += dicts['Username'] + reason + "\n"
+        elif dicts['Training ID'] == int(tid) and dicts["Going"] == 2:
+            if dicts["Reason"] not in not_going_dict:
+                not_going_dict[dicts["Reason"]] = []
+            not_going_dict[dicts["Reason"]].append(dicts['Username'])
+        else:
+            unsaid += dicts["Handle"] + " "
+
+    for key in not_going_dict.keys():
+        not_going += "["+ key + "] " + ", ".join(not_going_dict[key]) + "\n"
+    attendancelist = going + unsaid + "\n\n" + not_going
 
     return attendancelist
 
@@ -78,27 +96,32 @@ def get_training_id():
     return training_id
 
 def add_attendance(uid, tid):
-    try:
-        uidcell = loginSheet.find(str(uid))
-    except:
-        return None
 
-    username = loginSheet.cell(uidcell.row, 2).value
-    handle = loginSheet.cell(uidcell.row, 4).value
+    all_names = attendanceSheet.get_all_records()
+    row_count = 2
 
-    attending_dict_list = attendanceSheet.get_all_records()
+    for dicts in all_names:
+        if dicts['Training ID'] == int(tid) and dicts['Uid'] == uid:
+            row_to_edit = row_count
+            break
+        row_count += 1
 
-    if len(attending_dict_list) == 0:
-        attendanceSheet.insert_row([tid, uid, username, handle], 2)
-        return None
+    attendanceSheet.update_cell(row_to_edit, 5, 1)
+    attendanceSheet.update_cell(row_to_edit, 6, "")
 
-    else:
-        for dicts in attending_dict_list:
-            if dicts["Uid"] == uid and dicts['Training ID'] == int(tid):
-                return None
+def add_valid_reason(uid, tid, reason):
 
-    row_to_insert = len(attendanceSheet.col_values(1))
-    attendanceSheet.insert_row([tid, uid, username, handle], row_to_insert + 1)
+    all_names = attendanceSheet.get_all_records()
+    row_count = 2
+
+    for dicts in all_names:
+        if dicts['Training ID'] == int(tid) and dicts['Uid'] == uid:
+            row_to_edit = row_count
+            break
+        row_count += 1
+
+    attendanceSheet.update_cell(row_to_edit, 5, 2)
+    attendanceSheet.update_cell(row_to_edit, 6, reason)
 
 def create_standard_training():
     day, month, weekday, weekday_num = get_today()
@@ -125,15 +148,30 @@ def create_standard_training():
     else:
         training_time = "1PM - 4PM"
 
-    row_value = len(trainingSheet.row_values(1))
+    row_value = len(trainingSheet.col_values(1))
     standard_header = "❗️Kindly RSVP by {} {} {}, 6pm❗️\n".format(reply_day_info[2], reply_day_info[0], reply_day_info[1])
-    standard_venue = "Venue: " + training_venue + "\n"
-    standard_time ="Time: " + training_time + "\n"
+    training_id = get_training_id()
     trainingSheet.insert_row(
-        [get_training_id(), standard_header, training_venue, training_time, training_day_info[3], training_day_info[2],
-         training_day_info[0], training_day_info[1], 1], 2)
+        [training_id, standard_header, training_venue, training_time, training_day_info[3], training_day_info[2],
+         training_day_info[0], training_day_info[1], 1], row_value + 1)
+
+    fill_attendance_sheet(training_id, next_training_day)
 
     return training_day_info[2], training_day_info[0], training_day_info[1]
+
+def fill_attendance_sheet(training_id, training_day):
+    all_names = loginSheet.get_all_records()
+    row_to_insert = len(attendanceSheet.col_values(1))
+    for each_member in all_names:
+        training_day = str(training_day)
+        uid = each_member["ID"]
+        username = each_member["Username"]
+        handle = each_member["Handle"]
+        going = each_member[training_day]
+        reason = each_member[training_day + "reason"]
+        each_column = [training_id, uid, username, handle, going, reason]
+        attendanceSheet.insert_row(each_column, row_to_insert + 1)
+        row_to_insert += 1
 
 
 
@@ -159,12 +197,24 @@ def attendance_markup():
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
-def reply_attendance_markup(TID):
+def reply_attendance_markup(TID, chat_id, message_id):
     markup = InlineKeyboardMarkup()
     markup.row_width = 1
     markup.add(InlineKeyboardButton("Attending", callback_data="cb_attending" + TID),
-               InlineKeyboardButton("Valid Reason", callback_data="cb_validReason" + TID),
-               InlineKeyboardButton("Find Excuse", callback_data="cb_findExcuse" + TID))
+               InlineKeyboardButton("Valid Reason", callback_data="cb_validReason" + TID + "." + str(chat_id) + "." + str(message_id)),
+               InlineKeyboardButton("Find Excuse", callback_data="cb_findExcuse" + TID),
+               InlineKeyboardButton("Add Remark/ Update Reason", callback_data="cb_addRemark" + TID))
+    return markup
+
+def valid_reason_markup(tid):
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(InlineKeyboardButton("Class", callback_data="vrClass" + tid),
+               InlineKeyboardButton("Fam", callback_data="vrFam" + tid),
+               InlineKeyboardButton("Sick", callback_data="vrSick" + tid),
+               InlineKeyboardButton("Injury", callback_data="vrInjury" + tid),
+               InlineKeyboardButton("Overseas", callback_data="vrOverseas" + tid),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
 #types available are post(P), check(C), delete(D)
@@ -204,6 +254,8 @@ def feedback_markup():
                InlineKeyboardButton("Miscellaneous Feedback", callback_data="cb_miscFeedback"),
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
+
+
 
 #FUNCTIONALITIES
 
@@ -265,9 +317,115 @@ class Feedback:
         self.receiver_id = None
         self.receiver = None
 
-#handle all callback selections
+#handle level 4 callback selections
+@bot.callback_query_handler(func=lambda call: call.data.startswith("vr"))
+def callback_query(call):
+    print(call.message)
+    user_id = call.from_user.id
+    call.data = call.data.split(".")
+    p_chat_id = int(call.data[1])
+    p_message_id = int(call.data[2])
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+
+    #valid reason handler ATTENDANCE
+    if call.data[0].startswith("vrClass"):
+        bot.answer_callback_query(call.id)
+        selected_cell = trainingSheet.find(call.data[0][7:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        add_valid_reason(user_id, training_details[0], "Class")
+        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id, reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+    elif call.data[0].startswith("vrFam"):
+        bot.answer_callback_query(call.id)
+        selected_cell = trainingSheet.find(call.data[0][5:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        add_valid_reason(user_id, training_details[0], "Fam")
+        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id,
+            reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+
+    elif call.data[0].startswith("vrSick"):
+        bot.answer_callback_query(call.id)
+        selected_cell = trainingSheet.find(call.data[0][6:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        add_valid_reason(user_id, training_details[0], "Sick")
+        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id,
+            reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+
+    elif call.data[0].startswith("vrInjury"):
+        bot.answer_callback_query(call.id)
+        selected_cell = trainingSheet.find(call.data[0][8:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        add_valid_reason(user_id, training_details[0], "Injury")
+        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id,
+            reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+
+    elif call.data[0].startswith("vrOverseas"):
+        bot.answer_callback_query(call.id)
+        selected_cell = trainingSheet.find(call.data[0][10:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        add_valid_reason(user_id, training_details[0], "Overseas")
+        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(
+            text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                       training_details[2],
+                                                                                       training_details[3],
+                                                                                       training_details[5],
+                                                                                       training_details[6],
+                                                                                       training_details[7],
+                                                                                       training_details[0])
+                 + get_attendance(training_details[0]),
+            chat_id=p_chat_id,
+            message_id=p_message_id,
+            reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+
+#handle all other callback selections
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
+    print(call.data)
     print(call.message)
     user_id = call.from_user.id
     chat_id = call.message.chat.id
@@ -304,10 +462,9 @@ def callback_query(call):
                               message_id=message_id, reply_markup=menu_markup())
     #ATTENDANCE LAYER 2
     elif call.data == "cb_checkAttendance":
-        bot.answer_callback_query(call.id, "Displaying Attendance")
-        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
-                              message_id=message_id, reply_markup=menu_markup())
-        bot.send_message(chat_id, get_attendance())
+        bot.answer_callback_query(call.id, "Retrieving Attendance")
+        bot.edit_message_text(text="Which training attendance would you like to check?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=training_selection_markup('C'))
     elif call.data == "cb_postAttendance":
         bot.answer_callback_query(call.id, "Select training to post")
         #add authorization here
@@ -327,11 +484,25 @@ def callback_query(call):
                                                                                                    training_details[6],
                                                                                                    training_details[7],
                                                                                                    training_details[0])
-                         + get_attendance(),
-                         reply_markup=reply_attendance_markup(str(training_details[0])))
+                         + get_attendance(training_details[0]),
+                         reply_markup=reply_attendance_markup(str(training_details[0]),chat_id ,message_id))
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
-
+    #CHECK ATTENDANCE
+    elif call.data.startswith('CTID'):
+        bot.answer_callback_query(call.id, "checking attendance")
+        selected_cell = trainingSheet.find(call.data[4:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        bot.send_message(chat_id, "{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                                   training_details[2],
+                                                                                                   training_details[3],
+                                                                                                   training_details[5],
+                                                                                                   training_details[6],
+                                                                                                   training_details[7],
+                                                                                                   training_details[0])
+                         + get_attendance(training_details[0]))
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
     #UPDATE ATTENDANCE
     elif call.data.startswith('cb_attending'):
         training_code = call.data[12:]
@@ -346,9 +517,23 @@ def callback_query(call):
                                                                                                     training_details[6],
                                                                                                     training_details[7],
                                                                                                     training_details[0])
-                              +get_attendance(),
+                              +get_attendance(training_details[0]),
                               chat_id=chat_id,
-                              message_id=message_id, reply_markup=reply_attendance_markup(str(training_details[0])))
+                              message_id=message_id, reply_markup=reply_attendance_markup(str(training_details[0]), chat_id, message_id))
+
+    elif call.data.startswith('cb_validReason'):
+        training_code = call.data[14:]
+        bot.answer_callback_query(call.id, "I have sent you a PM! Let me know your reason")
+        bot.send_message(user_id,
+                         text="Select valid reason, if it has not been stated here then you are probably looking for an excuse... GOOD FOR YOU",
+                         reply_markup=valid_reason_markup(str(training_code)))
+
+        # bot.edit_message_text(
+        #     text="Select valid reason, if it has not been stated here then you are probably looking for an excuse... GOOD FOR YOU",
+        #     chat_id=chat_id,
+        #     message_id=message_id, reply_markup=valid_reason_markup(str(training_code)))
+
+
 
     #EVENTS
     elif call.data == "cb_createEvents":
