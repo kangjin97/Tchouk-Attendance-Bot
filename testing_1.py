@@ -437,7 +437,7 @@ def callback_query(call):
         selected_cell = trainingSheet.find(call.data[0][7:])
         training_details = trainingSheet.row_values(selected_cell.row)
         add_valid_reason(user_id, training_details[0], "Class")
-        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(text="You have updated your attendance", chat_id=chat_id, message_id=message_id)
         bot.edit_message_text(
             text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                        training_details[2],
@@ -454,7 +454,7 @@ def callback_query(call):
         selected_cell = trainingSheet.find(call.data[0][5:])
         training_details = trainingSheet.row_values(selected_cell.row)
         add_valid_reason(user_id, training_details[0], "Fam")
-        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(text="You have updated your attendance", chat_id=chat_id, message_id=message_id)
         bot.edit_message_text(
             text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                        training_details[2],
@@ -473,7 +473,7 @@ def callback_query(call):
         selected_cell = trainingSheet.find(call.data[0][6:])
         training_details = trainingSheet.row_values(selected_cell.row)
         add_valid_reason(user_id, training_details[0], "Sick")
-        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(text="You have updated your attendance", chat_id=chat_id, message_id=message_id)
         bot.edit_message_text(
             text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                        training_details[2],
@@ -492,7 +492,7 @@ def callback_query(call):
         selected_cell = trainingSheet.find(call.data[0][8:])
         training_details = trainingSheet.row_values(selected_cell.row)
         add_valid_reason(user_id, training_details[0], "Injury")
-        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(text="You have updated your attendance", chat_id=chat_id, message_id=message_id)
         bot.edit_message_text(
             text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                        training_details[2],
@@ -511,7 +511,7 @@ def callback_query(call):
         selected_cell = trainingSheet.find(call.data[0][10:])
         training_details = trainingSheet.row_values(selected_cell.row)
         add_valid_reason(user_id, training_details[0], "Overseas")
-        bot.send_message(chat_id, "You have updated your attendance")
+        bot.edit_message_text(text="You have updated your attendance", chat_id=chat_id, message_id=message_id)
         bot.edit_message_text(
             text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
                                                                                        training_details[2],
