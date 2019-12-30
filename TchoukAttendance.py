@@ -688,7 +688,7 @@ def callback_query(call):
 
 # bot.polling(none_stop=True)
 
-@server.route('/' + bot_token, methods=['POST'])
+@server.route('/' + token, methods=['POST'])
 def getMessage():
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
     return "!", 200
