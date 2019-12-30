@@ -37,6 +37,9 @@ def listener(messages):
 bot = telebot.TeleBot(token)
 bot.set_update_listener(listener)  # register listener
 
+#GLOBALS
+userStep = {}
+
 #Other Necessary Functions
 
 #authentication
@@ -65,6 +68,7 @@ def get_attendance(tid):
     attending_dict_list = attendanceSheet.get_all_records()
     going = "Going:\n"
     not_going = "Not Going:\n"
+    excuses = "\n"
     unsaid = "\n"
     not_going_dict = {}
 
@@ -80,12 +84,14 @@ def get_attendance(tid):
             if dicts["Reason"] not in not_going_dict:
                 not_going_dict[dicts["Reason"]] = []
             not_going_dict[dicts["Reason"]].append(dicts['Username'])
+        elif dicts['Training ID'] == int(tid) and dicts["Going"] == 3:
+            excuses += dicts['Username'] + reason + "\n"
         else:
             unsaid += dicts["Handle"] + " "
 
     for key in not_going_dict.keys():
         not_going += "["+ key + "] " + ", ".join(not_going_dict[key]) + "\n"
-    attendancelist = going + unsaid + "\n\n" + not_going
+    attendancelist = going + unsaid + "\n\n" + not_going + excuses
 
     return attendancelist
 
@@ -122,6 +128,38 @@ def add_valid_reason(uid, tid, reason):
 
     attendanceSheet.update_cell(row_to_edit, 5, 2)
     attendanceSheet.update_cell(row_to_edit, 6, reason)
+
+def update_remark(uid, tid, reason):
+
+    all_names = attendanceSheet.get_all_records()
+    row_count = 2
+
+    for dicts in all_names:
+        if dicts['Training ID'] == int(tid) and dicts['Uid'] == uid:
+            row_to_edit = row_count
+            break
+        row_count += 1
+
+    if int(attendanceSheet.cell(row_to_edit, 5).value) != 2:
+        attendanceSheet.update_cell(row_to_edit, 6, reason)
+        return True
+    else:
+        return False
+
+def add_excuse(uid, tid, reason):
+
+    all_names = attendanceSheet.get_all_records()
+    row_count = 2
+
+    for dicts in all_names:
+        if dicts['Training ID'] == int(tid) and dicts['Uid'] == uid:
+            row_to_edit = row_count
+            break
+        row_count += 1
+
+    attendanceSheet.update_cell(row_to_edit, 5, 3)
+    attendanceSheet.update_cell(row_to_edit, 6, reason)
+
 
 def create_standard_training():
     day, month, weekday, weekday_num = get_today()
@@ -173,7 +211,14 @@ def fill_attendance_sheet(training_id, training_day):
         attendanceSheet.insert_row(each_column, row_to_insert + 1)
         row_to_insert += 1
 
+# error handling
+def get_user_step(uid):
+    try:
+        value = userStep[uid][0]
+    except:
+        value = 0
 
+    return value
 
 
 #Inline keyboards
@@ -306,6 +351,33 @@ def command_menu(m):
     if not protect(cid):
         return None
     bot.send_message(m.chat.id, "Hello, Tchoukie! How can I help you today?", reply_markup=menu_markup())
+
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 1)
+def find_excuse(m):
+    uid = m.chat.id
+    p_chat_id = userStep[uid][1]
+    p_message_id = userStep[uid][2]
+    tid = userStep[uid][3]
+
+    reason = m.text
+    add_excuse(uid, tid, reason)
+    selected_cell = trainingSheet.find(tid)
+    training_details = trainingSheet.row_values(selected_cell.row)
+    bot.edit_message_text(
+        text="{} Venue: {} \n Time: {} \n Date: {}, {} {} \n Code: {} \n\n".format(training_details[1],
+                                                                                   training_details[2],
+                                                                                   training_details[3],
+                                                                                   training_details[5],
+                                                                                   training_details[6],
+                                                                                   training_details[7],
+                                                                                   training_details[0])
+             + get_attendance(training_details[0]),
+        chat_id=p_chat_id,
+        message_id=p_message_id,
+        reply_markup=reply_attendance_markup(str(training_details[0]), p_chat_id, p_message_id))
+
+    userStep[uid] = 0  # reset the users step back to 0
+
 
 #FeedBack
 
@@ -528,10 +600,12 @@ def callback_query(call):
                          text="Select valid reason, if it has not been stated here then you are probably looking for an excuse... GOOD FOR YOU",
                          reply_markup=valid_reason_markup(str(training_code)))
 
-        # bot.edit_message_text(
-        #     text="Select valid reason, if it has not been stated here then you are probably looking for an excuse... GOOD FOR YOU",
-        #     chat_id=chat_id,
-        #     message_id=message_id, reply_markup=valid_reason_markup(str(training_code)))
+    elif call.data.startswith('cb_findExcuse'):
+        training_code = call.data[13:]
+        bot.answer_callback_query(call.id, "Looking for an excuse are we eh? Come PM me 👿")
+        bot.send_message(user_id,
+                         text="Hit me with your best excuse! 🤯")
+        userStep[user_id] = [1, chat_id, message_id, training_code]  # set the user to the next step (expecting a reply in the listener now)
 
 
 
