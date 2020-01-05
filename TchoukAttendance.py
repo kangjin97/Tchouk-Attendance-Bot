@@ -4,12 +4,12 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pprint import pprint
 import datetime
-from flask import Flask, request
+# from flask import Flask, request
 import os
 
 
 #Initialize token and authorize database
-server = Flask(__name__)
+# server = Flask(__name__)
 token = '1057289810:AAH9VmpZwd8xWOHt6K03qc5eceFNpAwqWIE'
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('tchoukers.json', scope)
@@ -25,6 +25,7 @@ clubfundsSheet = client.open('Tchouk Attendance').worksheet("Club Funds")
 competitionsSheet = client.open('Tchouk Attendance').worksheet("Competitions")
 feedbacksheet = client.open('Tchouk Attendance').worksheet("Feedback")
 creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
+completedTrainings = client.open('Tchouk Attendance').worksheet("Completed Trainings")
 
 #GLOBALS
 
@@ -90,7 +91,7 @@ def get_attendance(tid):
             not_going_dict[dicts["Reason"]].append(dicts['Username'])
         elif dicts['Training ID'] == int(tid) and dicts["Going"] == 3:
             excuses += dicts['Username'] + reason + "\n"
-        else:
+        elif dicts['Training ID'] == int(tid):
             unsaid += dicts["Handle"] + " "
 
     for key in not_going_dict.keys():
@@ -201,6 +202,49 @@ def create_standard_training():
 
     return training_day_info[2], training_day_info[0], training_day_info[1]
 
+def get_backup_attendance(tid):
+    attending_dict_list = attendanceSheet.get_all_records()
+    going = []
+    not_going = []
+    excuses = []
+    unsaid = []
+
+    for dicts in attending_dict_list:
+        if dicts["Reason"] != "":
+            reason = " (" + dicts["Reason"] + ")"
+        else:
+            reason = ""
+
+        if dicts['Training ID'] == int(tid) and dicts["Going"] == 1:
+            going.append(dicts['Username'])
+        elif dicts['Training ID'] == int(tid) and dicts["Going"] == 2:
+            not_going.append(dicts['Username'] + reason)
+        elif dicts['Training ID'] == int(tid) and dicts["Going"] == 3:
+            excuses.append(dicts['Username'] + reason)
+        else:
+            unsaid.append(dicts['Username'])
+
+    return [going, not_going, excuses, unsaid]
+
+def backup_training(training_details):
+    training_session = "Training {}: {}, {} {}".format(training_details[0], training_details[5], training_details[6],
+                                                       training_details[7])
+    row_insert = len(completedTrainings.col_values(1)) + 1
+    name_list = get_backup_attendance(training_details[0])
+    new_row = []
+
+    new_row.append(training_session)
+    header = ["Going", "VR", "Excuse", "Unsaid"]
+    header_count = 0
+
+    for group in name_list:
+        new_row.append(header[header_count])
+        header_count += 1
+        for name in group:
+            new_row.append(name)
+
+    completedTrainings.insert_row(new_row, row_insert)
+
 def fill_attendance_sheet(training_id, training_day):
     all_names = loginSheet.get_all_records()
     row_to_insert = len(attendanceSheet.col_values(1))
@@ -293,7 +337,7 @@ def training_markup():
     markup.row_width = 1
     markup.add(InlineKeyboardButton("Create Standard Training", callback_data="cb_createStandardTraining"),
                InlineKeyboardButton("Create Custom Training", callback_data="cb_createCustomTraining"),
-               InlineKeyboardButton("Delete Training", callback_data="cb_deleteTraining"),
+               InlineKeyboardButton("Complete Training", callback_data="cb_completeTraining"),
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
@@ -321,27 +365,26 @@ def command_login(m):
 
     if m.text[7:] == normal_password:
         status = 1
+        position = "Member"
     elif m.text[7:] == exco_password:
         status = 2
+        position = "Exco"
     else:
         bot.send_message(cid, "Invalid Password!")
         return None
+
 
     #If not registered before, add user into database
     if not authenticate(uid):  # if user hasn't used the "/start" command yet:
         row_value = len(loginSheet.col_values(1))  # Target Row
         handle = "@" + m.from_user.username
-        loginSheet.insert_row([uid, m.from_user.first_name, status, handle], row_value + 1)
-        bot.send_message(cid, "User Authenticated, Welcome {}!".format(authenticate(uid)[1]))
+        loginSheet.insert_row([uid, m.from_user.first_name, status, handle, 0, "", 0, "", 0, "" ], row_value + 1)
+        bot.send_message(cid, "User Authenticated " + position + " login, Welcome {}!".format(authenticate(uid)[1]))
 
     #If changing status, Display change
     elif status != int(authenticate(uid)[2]):
         uidcell = loginSheet.find(str(uid))
         loginSheet.update_cell(uidcell.row, 3, status)
-        if status == 1:
-            position = "Member"
-        elif status == 2:
-            position = "Exco"
         bot.send_message(cid, "Member status updated: " + position)
 
     #If already in database, Tell member to GTFO!
@@ -666,10 +709,33 @@ def callback_query(call):
             bot.send_message(chat_id, "The next standard training has already been created. Remember to send out attendance!")
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
+
     elif call.data == "cb_createCustomTraining":
         bot.answer_callback_query(call.id)
         bot.edit_message_text(text="Select Training", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
+
+    elif call.data == "cb_completeTraining":
+        bot.answer_callback_query(call.id, "Mark a training as complete!")
+        bot.edit_message_text(text="Which training has been completed?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=training_selection_markup('D'))
+
+    # DELETE TRAINING
+    elif call.data.startswith('DTID'):
+        bot.answer_callback_query(call.id, "completing training")
+        selected_cell = trainingSheet.find(call.data[4:])
+        training_details = trainingSheet.row_values(selected_cell.row)
+        trainingSheet.delete_row(selected_cell.row)
+        backup_training(training_details)
+        bot.send_message(chat_id,
+                         "{}, {} {} training has been marked as completed \n Training Code: {} \n\n".format(training_details[5],
+                                                                                               training_details[6],
+                                                                                               training_details[7],
+                                                                                               training_details[0])
+                         )
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+
     elif call.data == "cb_checkEvents":
         bot.answer_callback_query(call.id, "This Feature has not been implemented")
 
@@ -686,22 +752,22 @@ def callback_query(call):
                               message_id=message_id, reply_markup=menu_markup())
         bot.send_message(chat_id, "Please tell me your feedback, rest assured this will be 101% anonymous!")
 
-# bot.polling(none_stop=True)
+bot.polling(none_stop=True)
 
-@server.route('/' + token, methods=['POST'])
-def getMessage():
-    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-    return "!", 200
-
-@server.route("/")
-def webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url='https://tchoukbot.herokuapp.com/' + token)
-    return "!", 200
-
-
-if __name__ == "__main__":
-    server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+# @server.route('/' + token, methods=['POST'])
+# def getMessage():
+#     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+#     return "!", 200
+#
+# @server.route("/")
+# def webhook():
+#     bot.remove_webhook()
+#     bot.set_webhook(url='https://tchoukbot.herokuapp.com/' + token)
+#     return "!", 200
+#
+#
+# if __name__ == "__main__":
+#     server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
 
 
 # def step_function():
