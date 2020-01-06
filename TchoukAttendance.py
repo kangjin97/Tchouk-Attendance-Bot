@@ -65,6 +65,18 @@ def protect(uid):
         return True
     return False
 
+def is_exco(uid):
+    try:
+        selected_cell = loginSheet.find(uid)
+    except:
+        return False
+
+    if loginSheet.cell(selected_cell.row, 3).value == 2:
+        return True
+    else:
+        return False
+
+
 #array [day, month, weekday, weekday num]
 def get_today(d=datetime.datetime.today()):
     return [d.strftime('%d'), d.strftime('%b'), d.strftime('%a'), d.strftime('%w')]
@@ -819,6 +831,8 @@ def callback_query(call):
         bot.edit_message_text(text="Which training attendance would you like to check?", chat_id=chat_id,
                               message_id=message_id, reply_markup=training_selection_markup('C'))
     elif call.data == "cb_postAttendance":
+        if not is_exco(user_id):
+            return bot.answer_callback_query(call.id, "Not Authorized")
         bot.answer_callback_query(call.id, "Select training to post")
         #add authorization here
         bot.edit_message_text(text="Which training attendance would you like to post?", chat_id=chat_id,
@@ -827,6 +841,8 @@ def callback_query(call):
     # ATTENDANCE LAYER 3
     #POST ATTENDANCE
     elif call.data.startswith('PTID'):
+        if not is_exco(user_id):
+            return bot.answer_callback_query(call.id, "Not Authorized")
         bot.answer_callback_query(call.id, "posting attendance")
         selected_cell = trainingSheet.find(call.data[4:])
         training_details = trainingSheet.row_values(selected_cell.row)
@@ -904,6 +920,9 @@ def callback_query(call):
 
     #TRAINING
     elif call.data == "cb_createStandardTraining":
+        if not is_exco(user_id):
+            return bot.answer_callback_query(call.id, "Not Authorized")
+
         bot.answer_callback_query(call.id, "Creating training...")
         status = create_standard_training()
         if status:
@@ -914,11 +933,11 @@ def callback_query(call):
                               message_id=message_id, reply_markup=menu_markup())
 
     elif call.data == "cb_createCustomTraining":
-        bot.answer_callback_query(call.id)
-        bot.edit_message_text(text="Select Training", chat_id=chat_id,
-                              message_id=message_id, reply_markup=menu_markup())
+        bot.answer_callback_query(call.id, "This feature has not been implemented yet")
 
     elif call.data == "cb_completeTraining":
+        if not is_exco(user_id):
+            return bot.answer_callback_query(call.id, "Not Authorized")
         bot.answer_callback_query(call.id, "Mark a training as complete!")
         bot.edit_message_text(text="Which training has been completed?", chat_id=chat_id,
                               message_id=message_id, reply_markup=training_selection_markup('D'))
