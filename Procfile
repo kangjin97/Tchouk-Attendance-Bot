@@ -1,1 +1,1 @@
-web: py TchoukAttendance.py
+web: python TchoukAttendance.py
