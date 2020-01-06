@@ -4,12 +4,12 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from pprint import pprint
 import datetime
-# from flask import Flask, request
+from flask import Flask, request
 import os
 
 
 #Initialize token and authorize database
-# server = Flask(__name__)
+server = Flask(__name__)
 token = '1057289810:AAH9VmpZwd8xWOHt6K03qc5eceFNpAwqWIE'
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('tchoukers.json', scope)
