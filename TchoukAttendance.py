@@ -1,7 +1,7 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from pprint import pprint
 import datetime
 # from flask import Flask, request
@@ -309,9 +309,61 @@ def reply_to_feedback(fid, message):
     reply_to_id = int(feedbackSheet.cell(selected_cell.row, 2).value)
     bot.send_message(reply_to_id, "Received an anonymous reply for Feedback {}:\n{}".format(fid, message))
 
+def subscribe(uid, session):
+    selected_cell = loginSheet.find(str(uid))
+
+    if session == 10:
+        loginSheet.update_cell(selected_cell.row, 5, 1)
+        loginSheet.update_cell(selected_cell.row, 6, "")
+        loginSheet.update_cell(selected_cell.row, 7, 1)
+        loginSheet.update_cell(selected_cell.row, 8, "")
+        loginSheet.update_cell(selected_cell.row, 9, 1)
+        loginSheet.update_cell(selected_cell.row, 10, "")
+
+    elif session == 2:
+        loginSheet.update_cell(selected_cell.row, 5, 1)
+        loginSheet.update_cell(selected_cell.row, 6, "")
+
+    elif session == 5:
+        loginSheet.update_cell(selected_cell.row, 7, 1)
+        loginSheet.update_cell(selected_cell.row, 8, "")
+
+    elif session == 0:
+        loginSheet.update_cell(selected_cell.row, 9, 1)
+        loginSheet.update_cell(selected_cell.row, 10, "")
+
+def unsubscribe(uid, session):
+    selected_cell = loginSheet.find(str(uid))
+
+    if session == 10:
+        loginSheet.update_cell(selected_cell.row, 5, 2)
+        loginSheet.update_cell(selected_cell.row, 7, 2)
+        loginSheet.update_cell(selected_cell.row, 9, 2)
+
+    elif session == 2:
+        loginSheet.update_cell(selected_cell.row, 5, 2)
+
+    elif session == 5:
+        loginSheet.update_cell(selected_cell.row, 7, 2)
+
+    elif session == 0:
+        loginSheet.update_cell(selected_cell.row, 9, 2)
+
+def add_unsub_reason(uid, session, reason):
+    selected_cell = loginSheet.find(str(uid))
+
+    if session == 2:
+        update_col = 6
+    elif session == 5:
+        update_col = 8
+    elif session == 0:
+        update_col = 10
+
+    loginSheet.update_cell(selected_cell.row, update_col, reason)
+
 
 # error handling
-# [1 = findExcuse, 2 = addRemark, 3 = giveFeedback]
+# [1 = findExcuse, 2 = addRemark, 3 = giveFeedback, 4 = check feedback fid, 5 = reply feedback message, 6 = add sub/unsub reason]
 def get_user_step(uid):
     try:
         value = userStep[uid][0]
@@ -325,12 +377,14 @@ def get_user_step(uid):
 def menu_markup():
     markup = InlineKeyboardMarkup()
     markup.row_width = 2
-    markup.add(InlineKeyboardButton("Attendance", callback_data="cb_attendance"),
-               InlineKeyboardButton("Events", callback_data="cb_event"),
-               InlineKeyboardButton("Training", callback_data="cb_training"),
-               InlineKeyboardButton("Club Funds", callback_data="cb_clubfunds"),
-               InlineKeyboardButton("Competitions", callback_data="cb_competition"),
-               InlineKeyboardButton("Feedback", callback_data="cb_feedback"),
+    markup.add(InlineKeyboardButton("Attendance 📋", callback_data="cb_attendance"),
+               InlineKeyboardButton("Events 🍻", callback_data="cb_event"),
+               InlineKeyboardButton("Training 🤾🏻‍♂️", callback_data="cb_training"),
+               InlineKeyboardButton("Club Funds 💰", callback_data="cb_clubfunds"),
+               InlineKeyboardButton("Competitions 🥇", callback_data="cb_competition"),
+               InlineKeyboardButton("Feedback ☎", callback_data="cb_feedback"),
+               InlineKeyboardButton("Subscribe ⭐", callback_data="cb_sub"),
+               InlineKeyboardButton("UN-Subscribe ☠", callback_data="cb_unsub"),
                InlineKeyboardButton("Quit", callback_data="cb_quit"))
     return markup
 
@@ -392,6 +446,24 @@ def training_markup():
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
+#[type is either "SUB" or "UNSUB"]
+def subscriptions_choices_markup(type):
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    if type == "SUB":
+        otherbutton = InlineKeyboardButton("🏆🏆 ALL 🏆🏆", callback_data=type + "10")
+        button = InlineKeyboardButton("Back", callback_data="cb_back")
+    else:
+        otherbutton = InlineKeyboardButton("Just here to donate club funds only ✌🏻", callback_data="cb_donatefunds")
+        button = InlineKeyboardButton("I'm Sorry 😭", callback_data="cb_imsorry")
+
+    markup.add(InlineKeyboardButton("Tuesday", callback_data=type + "2"),
+               InlineKeyboardButton("Friday", callback_data=type + "5"),
+               InlineKeyboardButton("Sunday", callback_data=type + "0"),
+               otherbutton,
+               button)
+    return markup
+
 def feedback_markup():
     markup = InlineKeyboardMarkup()
     markup.row_width = 1
@@ -407,6 +479,13 @@ def feedback_reply_markup():
     markup.add(InlineKeyboardButton("Reply to Feedback", callback_data="cb_replyFeedback"),
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
+
+def unsub_select_markup():
+    reasonSelect = ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
+    reasonSelect.add('Class', 'Fam', 'Sick', 'Injury', 'Overseas')
+
+    return reasonSelect
+
 
 
 
@@ -553,6 +632,31 @@ def replyFeedback(m):
 
     userStep[uid] = 0  # reset the users step back to 0
 
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 6)
+def replyFeedback(m):
+    uid = m.chat.id
+    session = userStep[uid][1]
+
+    if session == 2:
+        day = 'Tuesday'
+    elif session == 5:
+        day = 'Friday'
+    else:
+        day = 'Sunday'
+
+    reason = m.text
+    hideBoard = ReplyKeyboardRemove()  # if sent as reply_markup, will hide the keyboard
+
+    if reason != "Class" and reason != "Fam" and reason != "Injury" and reason != "Overseas" and reason != "Sick":
+        bot.send_message(uid, "Don't try to be funny ah I'm watching you!", reply_markup=hideBoard)
+
+    else:
+        unsubscribe(uid, session)
+        add_unsub_reason(uid, session, reason)
+        bot.send_message(uid, "{} Trainings unsubscribed!".format(day), reply_markup=hideBoard)
+
+    userStep[uid] = 0  # reset the users step back to 0
+
 
 #handle level 4 callback selections
 @bot.callback_query_handler(func=lambda call: call.data.startswith("vr"))
@@ -681,9 +785,9 @@ def callback_query(call):
         bot.edit_message_text(text="Which part of Events do you need assistance with?", chat_id=chat_id,
                               message_id=message_id, reply_markup=training_markup())
     elif call.data == "cb_competition":
-        bot.answer_callback_query(call.id, "Please select competition")
+        bot.answer_callback_query(call.id, "This feature is not ready yet")
     elif call.data == "cb_clubfunds":
-        bot.answer_callback_query(call.id, "Redirecting you to the payment page")
+        bot.answer_callback_query(call.id, "This feature is not ready yet")
     elif call.data == "cb_feedback":
         bot.answer_callback_query(call.id)
         bot.edit_message_text(text="Your feedback will greatly improve our community!", chat_id=chat_id,
@@ -697,6 +801,18 @@ def callback_query(call):
         bot.answer_callback_query(call.id)
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
+
+    elif call.data == "cb_imsorry":
+        bot.answer_callback_query(call.id, "You Better Be...")
+        bot.delete_message(chat_id=chat_id, message_id=message_id)
+
+    elif call.data == "cb_donatefunds":
+        bot.answer_callback_query(call.id, "Thanks for your kind donation!")
+        bot.send_message(chat_id, "🎊🎊 Good news for the team! 🎊🎊\n\nIt seems that {} is feeling rich 💵💵 and wants to donate extra funds to the team!  \n\n"
+                                  "🎉🎉Do get him to buy you free Bubble Tea if you see him around🎉🎉".format(
+                                      call.from_user.first_name))
+        bot.delete_message(chat_id=chat_id, message_id=message_id)
+
     #ATTENDANCE LAYER 2
     elif call.data == "cb_checkAttendance":
         bot.answer_callback_query(call.id, "Retrieving Attendance")
@@ -782,9 +898,9 @@ def callback_query(call):
 
     #EVENTS
     elif call.data == "cb_createEvents":
-        bot.answer_callback_query(call.id, "This Feature has not been implemented")
+        bot.answer_callback_query(call.id, "This feature is not ready yet")
     elif call.data == "cb_checkEvents":
-        bot.answer_callback_query(call.id, "This Feature has not been implemented")
+        bot.answer_callback_query(call.id, "This feature is not ready yet")
 
     #TRAINING
     elif call.data == "cb_createStandardTraining":
@@ -827,6 +943,44 @@ def callback_query(call):
     elif call.data == "cb_checkEvents":
         bot.answer_callback_query(call.id, "This Feature has not been implemented")
 
+    #SUBSCRIBE
+    elif call.data == "cb_sub":
+        bot.answer_callback_query(call.id, "Which training would you like to subscribe for?")
+        bot.edit_message_text(
+            text="Which training would you like to Subscribe for? You can still change your attendance status after subscription!\n"
+                 "Subscribing simply provides a more convenient way for you to indicate your attendance if you turn up regularly for training! 🌞",
+            chat_id=chat_id,
+            message_id=message_id, reply_markup=subscriptions_choices_markup("SUB"))
+
+    elif call.data.startswith("SUB"):
+        bot.answer_callback_query(call.id, "Good Choice!")
+        session = int(call.data[3:])
+
+        if session == 2:
+            day = 'Tuesday'
+        elif session == 5:
+            day = 'Friday'
+        elif session == 0:
+            day = 'Sunday'
+        else:
+            day = 'Tuesday, Friday and Sunday'
+
+        subscribe(user_id, session)
+        bot.send_message(chat_id, "🎊 {} has subscribed for all {} trainings 🎊".format(call.from_user.first_name, day))
+
+    #UNSUBSCRIBE
+    elif call.data == "cb_unsub":
+        bot.answer_callback_query(call.id, "All clicks on this button have been recorded and will be used against you accordingly")
+        bot.send_photo(chat_id, open('eugene.jpg', 'rb'), caption="You have something to say?", reply_markup=subscriptions_choices_markup("UNSUB"))
+
+    elif call.data.startswith("UNSUB"):
+        bot.answer_callback_query(call.id, "Excuse me?")
+        session = int(call.data[5:])
+        bot.send_message(user_id, "We have noticed that you have unsubscribed for one or more trainings... \n"
+                                  "Better explain yourself right now", reply_markup=unsub_select_markup())
+        userStep[user_id] = [6, session]
+
+
     #FEEDBACK
     elif call.data == "cb_trainingFeedback":
         bot.answer_callback_query(call.id)
@@ -850,26 +1004,26 @@ def callback_query(call):
 
     elif call.data == "cb_replyFeedback":
         bot.answer_callback_query(call.id, "Share your thoughts anonymously, PM me what you want to say!")
-        bot.send_message(user_id, "Which feedback would you like to reply to?")
+        bot.send_message(user_id, "Which feedback would you like to reply to? Input feedback ID.")
         userStep[user_id] = [4]
 
 
-bot.polling(none_stop=True)
+# bot.polling(none_stop=True)
 
-# @server.route('/' + token, methods=['POST'])
-# def getMessage():
-#     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-#     return "!", 200
-#
-# @server.route("/")
-# def webhook():
-#     bot.remove_webhook()
-#     bot.set_webhook(url='https://tchoukbot.herokuapp.com/' + token)
-#     return "!", 200
-#
-#
-# if __name__ == "__main__":
-#     server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+@server.route('/' + token, methods=['POST'])
+def getMessage():
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "!", 200
+
+@server.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url='https://tchoukbot.herokuapp.com/' + token)
+    return "!", 200
+
+
+if __name__ == "__main__":
+    server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
 
 
 # def step_function():
