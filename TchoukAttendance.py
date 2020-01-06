@@ -23,7 +23,7 @@ eventsSheet = client.open('Tchouk Attendance').worksheet("Events")
 trainingSheet = client.open('Tchouk Attendance').worksheet("Training")
 clubfundsSheet = client.open('Tchouk Attendance').worksheet("Club Funds")
 competitionsSheet = client.open('Tchouk Attendance').worksheet("Competitions")
-feedbacksheet = client.open('Tchouk Attendance').worksheet("Feedback")
+feedbackSheet = client.open('Tchouk Attendance').worksheet("Feedback")
 creatorSheet = client.open('Tchouk Attendance').worksheet("Creator")
 completedTrainings = client.open('Tchouk Attendance').worksheet("Completed Trainings")
 
@@ -221,7 +221,7 @@ def get_backup_attendance(tid):
             not_going.append(dicts['Username'] + reason)
         elif dicts['Training ID'] == int(tid) and dicts["Going"] == 3:
             excuses.append(dicts['Username'] + reason)
-        else:
+        elif dicts['Training ID'] == int(tid):
             unsaid.append(dicts['Username'])
 
     return [going, not_going, excuses, unsaid]
@@ -245,6 +245,11 @@ def backup_training(training_details):
 
     completedTrainings.insert_row(new_row, row_insert)
 
+def clear_completed_training_names(tid):
+    cells_found = attendanceSheet.findall(tid)
+    for cell in cells_found[::-1]:
+        attendanceSheet.delete_row(cell.row)
+
 def fill_attendance_sheet(training_id, training_day):
     all_names = loginSheet.get_all_records()
     row_to_insert = len(attendanceSheet.col_values(1))
@@ -259,8 +264,54 @@ def fill_attendance_sheet(training_id, training_day):
         attendanceSheet.insert_row(each_column, row_to_insert + 1)
         row_to_insert += 1
 
+def get_feedback_id():
+    feedback_id = int(creatorSheet.acell('B7').value)
+    creatorSheet.update_acell('B7', feedback_id + 1)
+
+    return feedback_id
+
+def add_feedback(uid, feedback, feedback_type):
+    row_insert = len(feedbackSheet.col_values(1)) + 1
+    fid = get_feedback_id()
+    time = datetime.datetime.now()
+    current_time = time.strftime("%H:%M:%S")
+    feedbackSheet.insert_row([fid, uid, feedback, feedback_type, current_time], row_insert)
+
+def get_feedback():
+
+    all_feedback = {}
+
+    feedback_dict = feedbackSheet.get_all_records()
+    for feedback_data in feedback_dict:
+        fid = feedback_data["FID"]
+        feedback = feedback_data["Feedback"]
+        type = feedback_data["Type"]
+        if type not in all_feedback:
+            all_feedback[type] = []
+        all_feedback[type].append("ID {}: {}".format(fid, feedback))
+
+    return all_feedback
+
+def stringify_dict(dict):
+
+    string_to_return = ""
+
+    for key in dict.keys():
+        string_to_return += "{}:\n".format(key)
+        for ch in dict[key]:
+            string_to_return += "{}\n".format(ch)
+        string_to_return += "\n\n"
+
+    return string_to_return
+
+def reply_to_feedback(fid, message):
+    selected_cell = feedbackSheet.find(fid)
+    reply_to_id = int(feedbackSheet.cell(selected_cell.row, 2).value)
+    bot.send_message(reply_to_id, "Received an anonymous reply for Feedback {}:\n{}".format(fid, message))
+
+
 # error handling
-# [1 = findExcuse, 2 = addRemark]
+# [1 = findExcuse, 2 = addRemark, 3 = giveFeedback]
 def get_user_step(uid):
     try:
         value = userStep[uid][0]
@@ -346,6 +397,14 @@ def feedback_markup():
     markup.row_width = 1
     markup.add(InlineKeyboardButton("Training Feedback", callback_data="cb_trainingFeedback"),
                InlineKeyboardButton("Miscellaneous Feedback", callback_data="cb_miscFeedback"),
+               InlineKeyboardButton("View Feedback", callback_data="cb_viewFeedback"),
+               InlineKeyboardButton("Back", callback_data="cb_back"))
+    return markup
+
+def feedback_reply_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 1
+    markup.add(InlineKeyboardButton("Reply to Feedback", callback_data="cb_replyFeedback"),
                InlineKeyboardButton("Back", callback_data="cb_back"))
     return markup
 
@@ -457,15 +516,43 @@ def updateRemark(m):
 
     userStep[uid] = 0  # reset the users step back to 0
 
-#FeedBack
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 3)
+def giveFeedback(m):
+    uid = m.chat.id
+    feedback_type = userStep[uid][1]
+    feedback = m.text
 
-feedback_dict = {}
+    add_feedback(uid, feedback, feedback_type)
+    bot.send_message(uid, "Thanks for your feedback! Let's continue working to build a better community")
 
-class Feedback:
-    def __init__(self, feedback):
-        self.feedback = feedback
-        self.receiver_id = None
-        self.receiver = None
+    userStep[uid] = 0  # reset the users step back to 0
+
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 4)
+def replyFeedback(m):
+    uid = m.chat.id
+    fid = m.text
+
+    try:
+        selected_cell = feedbackSheet.find(fid)
+    except:
+        userStep[uid] = 0  # reset the users step back to 0
+        return bot.send_message(uid, "There is no such Feedback ID please check again!")
+
+    bot.send_message(uid,
+                     "What would you like to reply to feedback {}? Although you identity will remain anonnymous, please be constructive and tactful!".format(
+                         fid))
+    userStep[uid] = [5, fid]
+
+@bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 5)
+def replyFeedback(m):
+    uid = m.chat.id
+    fid = userStep[uid][1]
+    message = m.text
+
+    reply_to_feedback(fid, message)
+
+    userStep[uid] = 0  # reset the users step back to 0
+
 
 #handle level 4 callback selections
 @bot.callback_query_handler(func=lambda call: call.data.startswith("vr"))
@@ -727,6 +814,7 @@ def callback_query(call):
         training_details = trainingSheet.row_values(selected_cell.row)
         trainingSheet.delete_row(selected_cell.row)
         backup_training(training_details)
+        clear_completed_training_names(training_details[0])
         bot.send_message(chat_id,
                          "{}, {} {} training has been marked as completed \n Training Code: {} \n\n".format(training_details[5],
                                                                                                training_details[6],
@@ -742,15 +830,29 @@ def callback_query(call):
     #FEEDBACK
     elif call.data == "cb_trainingFeedback":
         bot.answer_callback_query(call.id)
-        print (chat_id)
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
-        bot.send_message(chat_id, text="Please tell me your feedback, rest assured this will be 101% anonymous!")
+        bot.send_message(user_id, text="Please tell me your feedback, rest assured this will be 101% anonymous!")
+        userStep[user_id] = [3, "Training"]
+
     elif call.data == "cb_miscFeedback":
         bot.answer_callback_query(call.id)
         bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
                               message_id=message_id, reply_markup=menu_markup())
-        bot.send_message(chat_id, "Please tell me your feedback, rest assured this will be 101% anonymous!")
+        bot.send_message(user_id, "Please tell me your feedback, rest assured this will be 101% anonymous!")
+        userStep[user_id] = [3, "Misc"]
+
+    elif call.data == "cb_viewFeedback":
+        bot.answer_callback_query(call.id, "Here are all the feedback so far!")
+        bot.edit_message_text(text="Hello, Tchoukie! How can I help you today?", chat_id=chat_id,
+                              message_id=message_id, reply_markup=menu_markup())
+        bot.send_message(chat_id, stringify_dict(get_feedback()), reply_markup=feedback_reply_markup())
+
+    elif call.data == "cb_replyFeedback":
+        bot.answer_callback_query(call.id, "Share your thoughts anonymously, PM me what you want to say!")
+        bot.send_message(user_id, "Which feedback would you like to reply to?")
+        userStep[user_id] = [4]
+
 
 bot.polling(none_stop=True)
 
